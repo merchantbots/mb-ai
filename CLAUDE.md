@@ -22,8 +22,9 @@ mb-ai profile                               # dump the harness profile the backe
 
 `src/index.ts` (commander entry) · `src/commands/` (run, login, logout, doctor, profile). Core is flat in
 `src/`: `config` (backend + on-disk paths) · `session` (keychain + JWT + login/token) · `profile`
-(zod schema + fetch) · `launch` (version gate + servers.json + exec claude) · `errors`
-(types + parseError) · `log` · `version`. Built bin: `dist/index.js`.
+(zod schema + fetch) · `launch` (version gate + servers.json + exec claude) · `skills` (download +
+cache the plugin bundle → `--plugin-dir`) · `errors` (types + parseError) · `log` · `version`.
+Built bin: `dist/index.js`.
 
 ## Gotchas (verified vs claude 2.1.280)
 
@@ -31,6 +32,12 @@ mb-ai profile                               # dump the harness profile the backe
   into `servers.json` (mode 600) — keep it a file, never an argv string.
 - Tool ids are `mcp__<server>__<tool>`; `--allowed-tools` / `--mcp-config` are variadic → emit last.
 - the version gate in `launch.ts` hard-blocks a launcher older than the profile's `minLauncherVersion`.
+- `profile.skills` is the MB skills **plugin**. `skills.ts` caches it under
+  `~/.mb-ai/backends/<host>/skills/<commit>/`, keyed by the profile's `commit` (re-downloads only
+  when it changes; tells the user first), and passes the unpacked plugin root to
+  `claude --plugin-dir`. `--plugin-dir` is per-path/repeatable (safe before `--allowed-tools`) and
+  loads for that session only. A skills fetch failure degrades (cached copy, else launch without
+  them) — it never blocks the session. Bundle must be a tarball (or a zip claude can load).
 
 ## Releasing
 

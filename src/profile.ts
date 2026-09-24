@@ -10,7 +10,17 @@ const McpServer = z
   })
   .passthrough()
 
-// `skills` is a DUMMY placeholder in v1 (ignored).
+// The skills plugin bundle. `commit` is the content id (cache key); `downloadUrl` serves the
+// archive. All fields are optional so older/placeholder profiles parse — the launcher only syncs
+// when both `commit` and `downloadUrl` are present (see src/skills.ts).
+const Skills = z
+  .object({
+    plugin: z.string().optional(),
+    commit: z.string().optional(),
+    downloadUrl: z.string().optional(),
+  })
+  .passthrough()
+
 export const ProfileSchema = z
   .object({
     profileVersion: z.number(),
@@ -18,7 +28,7 @@ export const ProfileSchema = z
     systemPrompt: z.string(),
     mcpServers: z.record(McpServer),
     allowedTools: z.array(z.string()),
-    skills: z.unknown().optional(),
+    skills: Skills.optional(),
     flags: z
       .record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
       .optional(),

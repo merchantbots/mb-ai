@@ -2,6 +2,7 @@ import { resolveBackend } from '../config'
 import { getValidToken } from '../session'
 import { fetchProfile } from '../profile'
 import { writeServersJson, execClaude, assertLauncherVersion } from '../launch'
+import { ensureSkills } from '../skills'
 import { NeedsLogin, ApiError, MbError } from '../errors'
 import { info, warn, debug } from '../log'
 import { doLogin } from './login'
@@ -52,7 +53,10 @@ export async function run(opts: { backendUrl?: string }): Promise<void> {
   // 4. materialize servers.json (token baked in, mode 600) — prompt stays inline
   const serversPath = writeServersJson(host, profile, token)
 
-  // 4. hand off to claude
-  const code = await execClaude(profile, serversPath)
+  // 5. sync the skills plugin bundle (cached by commit; re-downloads only when it changes)
+  const pluginDirs = await ensureSkills(host, profile, token)
+
+  // 6. hand off to claude
+  const code = await execClaude(profile, serversPath, pluginDirs)
   process.exit(code)
 }
