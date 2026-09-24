@@ -1,0 +1,25 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+[scripts]
+# Runs once when a new workspace is created (zsh locally, bash in cloud).
+# `npm ci` = clean, lockfile-exact install; the repo's `prepare` hook then runs
+# `npm run build`, so dist/index.js is built and the tool is runnable immediately.
+setup = "npm ci"
+
+# CLI launcher — no shared port/DB/Docker; the smoke test binds an ephemeral port
+# (server.listen(0)), so workspaces can run side by side.
+run_mode = "concurrent"
+
+# Optional run buttons (delete any you don't want). None need $CONDUCTOR_PORT,
+# so they work both locally and in cloud.
+[scripts.run.dev]
+command = "npm run dev"              # tsup --watch: rebuild dist/ on change
+icon = "hammer"
+
+[scripts.run.typecheck]
+command = "npm run typecheck"        # tsc --noEmit
+icon = "check"
+
+[scripts.run.smoke]
+command = "npm run build && npm run test:it"   # stub-backend + fake-claude smoke test
+icon = "test-tube"
