@@ -1,7 +1,7 @@
 import { Command } from 'commander'
 import { VERSION } from './version'
 import { setVerbose } from './log'
-import { MbError } from './errors'
+import { MbError, ApiError, backendReport } from './errors'
 import { run } from './commands/run'
 import { loginCommand } from './commands/login'
 import { logoutCommand } from './commands/logout'
@@ -47,7 +47,13 @@ program
 program.action(async () => run(program.opts()))
 
 program.parseAsync().catch((e: unknown) => {
-  const message = e instanceof MbError ? e.message : e instanceof Error ? e.message : String(e)
+  // Backend-side failures (5xx): print the whole raw response so the user can hand it to the team.
+  if (e instanceof ApiError && e.serverSide) {
+    console.error(backendReport(e, 'start'))
+    process.exit(e.exitCode)
+  }
+  const message =
+    e instanceof ApiError ? e.detail() : e instanceof Error ? e.message : String(e)
   const exitCode = e instanceof MbError ? e.exitCode : 1
   console.error(`\nmb-ai: ${message}`)
   process.exit(exitCode)
