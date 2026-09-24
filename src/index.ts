@@ -6,6 +6,7 @@ import { run } from './commands/run'
 import { loginCommand } from './commands/login'
 import { logoutCommand } from './commands/logout'
 import { doctorCommand } from './commands/doctor'
+import { profileCommand } from './commands/profile'
 
 const program = new Command()
 
@@ -36,6 +37,11 @@ program
   .command('doctor')
   .description('Show diagnostics (backend, auth, claude)')
   .action(async () => doctorCommand(program.opts()))
+
+program
+  .command('profile')
+  .description('Print the harness profile the backend returns (diagnostic)')
+  .action(async () => profileCommand(program.opts()))
 
 // no subcommand → the run flow
 program.action(async () => run(program.opts()))

@@ -28,6 +28,7 @@ npm i -g https://github.com/merchantbots/mb-ai/releases/download/v0.1.0/mb-ai-0.
 ```bash
 mb-ai          # first run prompts you to log in, then launches claude
 mb-ai doctor   # show the backend, auth status, and detected claude version
+mb-ai profile  # print the full harness profile the backend returns (MCP servers, tools, flags, prompt)
 ```
 
 By default mb-ai talks to production (`https://api.merchantbots.com`). Your token is stored in
