@@ -19,13 +19,16 @@ program
     if (thisCmd.opts().verbose) setVerbose(true)
   })
 
+// login/logout are quiet utilities — hidden from `--help`. Normal use never needs them:
+// a bare `mb-ai` auto-prompts login when there's no valid token. `login` stays for pre-auth /
+// switching backend without launching; `logout` is the only way to wipe a stored token.
 program
-  .command('login')
+  .command('login', { hidden: true })
   .description('Log in to a backend and store a bearer token')
   .action(async () => loginCommand(program.opts()))
 
 program
-  .command('logout')
+  .command('logout', { hidden: true })
   .description('Clear the stored token for a backend')
   .action(async () => logoutCommand(program.opts()))
 
