@@ -3,6 +3,7 @@ import { getValidToken } from '../core/auth'
 import { fetchProfile } from '../core/profile'
 import { writeServersJson } from '../core/materialize'
 import { execClaude } from '../core/exec'
+import { assertLauncherVersion } from '../core/gate'
 import { NeedsLogin, ApiError, MbError } from '../core/errors'
 import { info, warn, debug } from '../core/log'
 import { doLogin } from './login'
@@ -49,7 +50,10 @@ export async function run(opts: { backendUrl?: string }): Promise<void> {
   if (stale) warn('Backend unreachable — using the last cached profile.')
   debug(`profile v${profile.profileVersion}${fromCache ? ' (cache)' : ''}, ${Object.keys(profile.mcpServers).length} MCP server(s)`)
 
-  // 3. materialize servers.json (token baked in, mode 600) — prompt stays inline
+  // 3. hard version gate — refuse (no self-update) if the launcher is below the floor
+  assertLauncherVersion(profile.minLauncherVersion)
+
+  // 4. materialize servers.json (token baked in, mode 600) — prompt stays inline
   const serversPath = writeServersJson(host, profile, token)
 
   // 4. hand off to claude

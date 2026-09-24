@@ -15,7 +15,6 @@ program
   .version(VERSION)
   .option('--backend-url <url>', 'override the backend URL (also MB_AI_BACKEND_URL)')
   .option('--verbose', 'verbose logging')
-  .option('--no-update-check', 'skip the update check')
   .hook('preAction', (thisCmd) => {
     if (thisCmd.opts().verbose) setVerbose(true)
   })

@@ -40,7 +40,7 @@ The **four things** layered on:
 │   ├─ token manager   keychain-backed; refresh-on-launch         │
 │   ├─ profile fetcher  GET /harness/profile (ETag-cached)       │
 │   ├─ materializer     writes servers.json (600) + prompt inline │
-│   ├─ version check    update-notifier nudge + minVersion gate   │
+│   ├─ version gate     hard minLauncherVersion gate (blocks)     │
 │   └─ exec             bakes token into servers.json, execs claude│
 │                                                                 │
 │   claude (child)                                                │
@@ -218,10 +218,11 @@ Updating follows the boring norms — **do not hand-roll binary self-replacement
 
 - **Delegate to the package manager** (`brew upgrade` / `npm update -g`). A nightly
   `brew upgrade` across the fleet is a perfectly standard "always current" story.
-- **Update-notifier nudge** — once/day the tool checks the registry/Releases and, if behind,
-  *prints* "new version — run `brew upgrade mb-ai`." It never replaces itself.
-- **Server `minVersion` gate** — the backend returns a minimum supported launcher version; if
-  the client is below it, warn or hard-block. Standard client/server version handshake.
+- **Hard `minLauncherVersion` gate (implemented, `core/gate.ts`)** — every run compares the
+  launcher `VERSION` to the profile's `minLauncherVersion`; if the client is below the floor it
+  **hard-blocks**, prints the `npm update -g` command, and exits (code 2). No self-update.
+- **No update-notifier nudge (v1)** — decided against; the hard gate + manual `npm update -g`
+  is the whole update story. (A daily nudge could be added later if wanted.)
 - **Only** for the single-binary-via-curl route: add a `mb-ai upgrade` subcommand that
   downloads from Releases and verifies a **checksum** (the rustup / deno / gh pattern).
 
@@ -416,8 +417,7 @@ number.
 
 1. **MVP walking skeleton** — launcher that: prompts login → `POST /auth/token` → keychain;
    fetches the profile; injects `MB_TOKEN`; execs `claude`. Proves the round-trip.
-2. **Distribution** — publish via Homebrew tap (or npm); add the update-notifier nudge and
-   the `minLauncherVersion` gate.
+2. **Distribution** — publish via npm; the hard `minLauncherVersion` gate is already wired.
 3. **Hardening** — client tool ceiling, ETag caching, refresh-on-launch, offline fallback.
 4. **Control-plane polish** — admin UI, per-flag overrides, canary a profile version to a
    subset before fleet-wide rollout.
@@ -431,9 +431,13 @@ number.
   (mode 600) at launch, refresh-on-launch. Broker demoted to an optional future path (only if
   TTL shrinks or central logging/policy is wanted). — §6
 - **2026-09-23 — Standard distribution, not self-updating code.** Distribute the launcher via
-  Homebrew tap / npm / install-script; update via the package manager + update-notifier nudge
-  + server `minVersion` gate. The bespoke signed-manifest binary-self-replace idea is dropped.
-  The *profile* stays a live server fetch (that was never a distribution problem). — §7
+  npm (public or private); update via `npm update -g`, enforced by a hard `minLauncherVersion`
+  gate (no nudge, no self-update). The bespoke signed-manifest binary-self-replace idea is
+  dropped. The *profile* stays a live server fetch (that was never a distribution problem). — §7
+- **2026-09-23 — Update policy: hard version gate, manual update.** `core/gate.ts` blocks any
+  launch where the launcher `VERSION` is below the profile's `minLauncherVersion`, printing the
+  `npm update -g` command and exiting (code 2). No `update-notifier`, no self-update — the user
+  is responsible for updating. — §7
 - **2026-09-23 — Migrations are forward-carried by the new tool version.** Local state has a
   `stateVersion`; the launcher runs the missing migrations up on launch (whole ladder,
   forward-only, with backup). Ownership split: local state → launcher, backend state → server
@@ -442,7 +446,7 @@ number.
 - **2026-09-23 — Launcher is TypeScript, distributed via npm.** Wrapping Claude Code (a Node
   tool) means every user already has the Node runtime + npm, so runtime and distribution come
   free and the launcher shares an ecosystem with the thing it launches. Stack: commander,
-  conf, @napi-rs/keyring, @inquirer/prompts, zod, execa, update-notifier. See `BUILD-PLAN.md`.
+  commander, @napi-rs/keyring, @inquirer/prompts, zod, execa. See `BUILD-PLAN.md`.
 - **2026-09-23 — mb-ai owns the skills-plugin lifecycle.** Verified against Claude Code
   2.1.280: there is no bare `--plugin name@marketplace` launch flag, but a full `claude plugin`
   CLI exists (`marketplace add`, `install` with `--scope`/`--accept-command`, `list --json`,

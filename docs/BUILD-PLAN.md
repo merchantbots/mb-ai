@@ -31,7 +31,7 @@ mb-ai
    ├─ 0. backend    default https://api.mb.ai, or --backend-url / MB_AI_BACKEND_URL override
    │                (keychain + cache/ + plugins/ namespaced by the backend host)
    │
-   ├─ 1. version    update-notifier nudge (once/day) + server minLauncherVersion gate
+   ├─ 1. gate       hard gate: launcher VERSION vs profile minLauncherVersion → block if below
    │
    ├─ 2. auth       token in keychain & not near expiry?
    │                   ├─ yes → use it
@@ -104,7 +104,7 @@ mb-ai
 - [ ] No `MB_TOKEN` env needed (token is baked into `servers.json`). Spawn via **`execa`** with `stdio: 'inherit'`; forward `SIGINT`/`SIGTERM`; mirror exit code.
 
 ### H. Versioning & migrations
-- [ ] `version.ts` — **`update-notifier`** nudge (once/day against npm); `minLauncherVersion` gate (warn/block if installed is below).
+- [x] **Hard version gate** (`core/gate.ts`) — every run compares launcher `VERSION` to the profile's `minLauncherVersion`; if below, **hard-block** with the `npm update -g` command and exit (code 2). No `update-notifier`, no self-update — the user updates manually. Covered by the integration test.
 - [ ] `migrations/` — ordered ladder keyed by `stateVersion`; on launch, back up `~/.mb-ai`, run missing migrations in order, stamp new version. Forward-only. (See ARCHITECTURE §12.)
 
 ### I. Error handling & UX
@@ -176,8 +176,8 @@ package.json  tsconfig.json  tsup.config.ts
 
 ## Dependencies (npm)
 
-`commander` · `conf` · `@napi-rs/keyring` · `@inquirer/prompts` · `zod` · `execa` ·
-`update-notifier` · (dev) `tsup` · `typescript` · `vitest` · `msw`.
+`commander` · `@napi-rs/keyring` · `@inquirer/prompts` · `zod` · `execa` ·
+(dev) `tsup` · `typescript` · `@types/node`.  *(add `vitest` when unit tests land.)*
 
 ---
 
