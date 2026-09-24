@@ -71,6 +71,10 @@ async function serve(initial) {
       return res.end(JSON.stringify({ code: 'AUTH_UNAUTHENTICATED', message: 'Not authenticated' }))
     }
     if (req.method === 'GET' && req.url === '/api/v1/mb-harness/profile') {
+      if (state.profileError) {
+        res.writeHead(state.profileError.status, { 'content-type': 'application/json' })
+        return res.end(JSON.stringify(state.profileError.body))
+      }
       res.writeHead(200, { 'content-type': 'application/json' })
       return res.end(JSON.stringify(state.profile))
     }
@@ -221,6 +225,29 @@ console.log('[F] doctor config preview')
   ok(/merchantbots/.test(d.stdout) && /seller-metrics-engine/.test(d.stdout), '[F] shows each MCP server URL')
   ok(s.state.downloads === 0, `[F] doctor is read-only — no skills download (got ${s.state.downloads})`)
   s.close()
+}
+
+// ── Case G: a backend 5xx prints the raw response + a "share with the team" ask ──
+console.log('[G] backend error → shareable report')
+{
+  const envelope = {
+    code: 'SYSTEM_INTERNAL_ERROR', type: 'INTERNAL_SERVER_ERROR',
+    message: 'An unexpected error occurred', statusCode: 500,
+    traceId: 'trace-abc-123', details: { debug: { exception: 'ValueError' } },
+  }
+  const s = await serve({ profile: baseProfile('0.1.0') })
+  s.state.profileError = { status: 500, body: envelope }
+
+  const r = await runLauncher(s.port)
+  ok(r.status !== 0, `[G] run exits non-zero (got ${r.status})`)
+  ok(r.args === null, '[G] claude was NOT executed')
+  ok(/tech team/i.test(r.stderr), '[G] asks the user to share it with the tech team')
+  ok(/HTTP 500/.test(r.stderr) && /SYSTEM_INTERNAL_ERROR/.test(r.stderr), '[G] shows status + code')
+  ok(/trace-abc-123/.test(r.stderr), '[G] surfaces the trace id')
+  ok(/An unexpected error occurred/.test(r.stderr) && /ValueError/.test(r.stderr), '[G] includes the verbatim response body')
+
+  const d = await runDoctor(s.port); s.close()
+  ok(/tech team/i.test(d.stdout) && /trace-abc-123/.test(d.stdout), '[G] doctor shows the same shareable report')
 }
 
 console.log(failures === 0 ? '\n✅ integration smoke: all passed' : `\n❌ integration smoke: ${failures} failed`)

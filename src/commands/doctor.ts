@@ -5,6 +5,7 @@ import { resolveBackend } from '../config'
 import { tokenStatus } from '../session'
 import { fetchProfile, type Profile } from '../profile'
 import { skillsStatus } from '../skills'
+import { ApiError, backendReport } from '../errors'
 import { semverLt } from '../launch'
 import { VERSION } from '../version'
 
@@ -143,6 +144,13 @@ export async function doctorCommand(opts: { backendUrl?: string }): Promise<void
     const profile = await fetchProfile(url, token)
     for (const line of await configLines(profile, host)) console.log(line)
   } catch (e) {
-    console.log(`${label('config')}couldn't fetch profile: ${e instanceof Error ? e.message : String(e)}`)
+    // Backend-side failure → show the full response for the user to share with the team.
+    if (e instanceof ApiError && e.serverSide) {
+      console.log(`${label('config')}the backend returned an error while building your profile:`)
+      console.log(backendReport(e, 'preview your config'))
+    } else {
+      const msg = e instanceof ApiError ? e.detail() : e instanceof Error ? e.message : String(e)
+      console.log(`${label('config')}couldn't fetch profile: ${msg}`)
+    }
   }
 }

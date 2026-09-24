@@ -23,8 +23,8 @@ mb-ai profile                               # dump the harness profile the backe
 `src/index.ts` (commander entry) · `src/commands/` (run, login, logout, doctor, profile). Core is flat in
 `src/`: `config` (backend + on-disk paths) · `session` (keychain + JWT + login/token) · `profile`
 (zod schema + fetch) · `launch` (version gate + servers.json + exec claude) · `skills` (download +
-cache the plugin bundle → `--plugin-dir`) · `errors` (types + parseError) · `log` · `version`.
-Built bin: `dist/index.js`.
+cache the plugin bundle → `--plugin-dir`) · `errors` (types + parseError + `backendReport`, the
+share-with-the-team dump for backend 5xx) · `log` · `version`. Built bin: `dist/index.js`.
 
 ## Gotchas (verified vs claude 2.1.280)
 
