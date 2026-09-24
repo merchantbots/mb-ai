@@ -1,7 +1,6 @@
 import { execa } from 'execa'
-import { resolveBackend } from '../core/backend'
-import { getToken } from '../core/secrets'
-import { expiresAt } from '../core/jwt'
+import { resolveBackend } from '../config'
+import { tokenStatus } from '../session'
 import { VERSION } from '../version'
 
 export async function doctorCommand(opts: { backendUrl?: string }): Promise<void> {
@@ -10,14 +9,12 @@ export async function doctorCommand(opts: { backendUrl?: string }): Promise<void
   console.log(`mb-ai       ${VERSION}`)
   console.log(`backend     ${url}`)
 
-  const envToken = process.env.MB_AI_TOKEN
-  const token = envToken || getToken(host)
-  const src = envToken ? '  (MB_AI_TOKEN)' : ''
+  const { token, source, expiresAt } = tokenStatus(host)
   if (!token) {
     console.log('auth        not logged in  (run: mb-ai login)')
   } else {
-    const exp = expiresAt(token)
-    const days = exp ? Math.round((exp - Date.now()) / 86_400_000) : null
+    const days = expiresAt ? Math.round((expiresAt - Date.now()) / 86_400_000) : null
+    const src = source === 'env' ? '  (MB_AI_TOKEN)' : ''
     console.log(`auth        logged in${days != null ? ` (~${days}d left)` : ''}${src}`)
   }
 

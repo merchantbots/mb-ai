@@ -1,11 +1,9 @@
-import { resolveBackend } from '../core/backend'
-import { getValidToken } from '../core/auth'
-import { fetchProfile } from '../core/profile'
-import { writeServersJson } from '../core/materialize'
-import { execClaude } from '../core/exec'
-import { assertLauncherVersion } from '../core/gate'
-import { NeedsLogin, ApiError, MbError } from '../core/errors'
-import { info, warn, debug } from '../core/log'
+import { resolveBackend } from '../config'
+import { getValidToken } from '../session'
+import { fetchProfile } from '../profile'
+import { writeServersJson, execClaude, assertLauncherVersion } from '../launch'
+import { NeedsLogin, ApiError, MbError } from '../errors'
+import { info, warn, debug } from '../log'
 import { doLogin } from './login'
 
 /** The default flow: resolve backend → ensure auth → profile → materialize → exec claude. */

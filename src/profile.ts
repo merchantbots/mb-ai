@@ -1,9 +1,37 @@
 import { readFileSync, writeFileSync } from 'node:fs'
-import { profileCachePath, ensureDirs } from './paths'
-import { ProfileSchema, type Profile } from '../schema/profile'
-import { parseError } from './http'
+import { z } from 'zod'
+import { profileCachePath, ensureDirs } from './config'
+import { parseError } from './errors'
 import { debug } from './log'
 
+// ── Schema (GET /api/v1/harness/profile body) ────────────────────────────────
+const McpServer = z
+  .object({
+    type: z.string(),
+    url: z.string(),
+    headers: z.record(z.string()).optional(),
+  })
+  .passthrough()
+
+// `skills` is a DUMMY placeholder in v1 (ignored).
+export const ProfileSchema = z
+  .object({
+    profileVersion: z.number(),
+    minLauncherVersion: z.string(),
+    ttlSeconds: z.number(),
+    systemPrompt: z.string(),
+    mcpServers: z.record(McpServer),
+    allowedTools: z.array(z.string()),
+    skills: z.unknown().optional(),
+    flags: z
+      .record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+      .optional(),
+  })
+  .passthrough()
+
+export type Profile = z.infer<typeof ProfileSchema>
+
+// ── Fetch + ETag cache ───────────────────────────────────────────────────────
 interface CacheEntry {
   etag: string | null
   ttlSeconds: number

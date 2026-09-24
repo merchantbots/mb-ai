@@ -11,24 +11,25 @@ npm ci                 # install (also builds via the prepare hook)
 npm run typecheck      # tsc --noEmit
 npm run test:it        # builds, then runs the stub-backend + fake-claude smoke test
 
-mb-ai --backend-url http://localhost:8000 login
-mb-ai --backend-url http://localhost:8000
+mb-ai --backend-url http://localhost:8000   # auto-prompts login on first run
 mb-ai doctor
-# headless / no keychain: set MB_AI_TOKEN=<jwt> to skip login
+# headless / no keychain: set MB_AI_TOKEN=<jwt> to skip the prompt
+# hidden utilities: mb-ai login (pre-auth) · mb-ai logout (wipe token)
 ```
 
 ## Layout
 
-`src/index.ts` (commander entry) · `src/commands/` (run, login, logout, doctor) · `src/core/`
-(auth, backend, http, profile, materialize, exec, gate, secrets, paths, jwt, log, errors) ·
-`src/schema/profile.ts` (zod). Built bin: `dist/index.js`.
+`src/index.ts` (commander entry) · `src/commands/` (run, login, logout, doctor). Core is flat in
+`src/`: `config` (backend + on-disk paths) · `session` (keychain + JWT + login/token) · `profile`
+(zod schema + fetch/cache) · `launch` (version gate + servers.json + exec claude) · `errors`
+(types + parseError) · `log` · `version`. Built bin: `dist/index.js`.
 
 ## Gotchas (verified vs claude 2.1.280)
 
 - Claude Code does **not** expand `${VARS}` in `--mcp-config`, so the launcher bakes the token
   into `servers.json` (mode 600) — keep it a file, never an argv string.
 - Tool ids are `mcp__<server>__<tool>`; `--allowed-tools` / `--mcp-config` are variadic → emit last.
-- `core/gate.ts` hard-blocks a launcher older than the profile's `minLauncherVersion`.
+- the version gate in `launch.ts` hard-blocks a launcher older than the profile's `minLauncherVersion`.
 
 ## Commits
 

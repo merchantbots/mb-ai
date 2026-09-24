@@ -1,8 +1,8 @@
 import { input, password } from '@inquirer/prompts'
-import { login } from '../core/auth'
-import { resolveBackend } from '../core/backend'
-import { NeedsLogin } from '../core/errors'
-import { info, warn } from '../core/log'
+import { login } from '../session'
+import { resolveBackend } from '../config'
+import { NeedsLogin } from '../errors'
+import { info, warn } from '../log'
 
 /** Interactive login against a specific backend. Returns the fresh token. */
 export async function doLogin(backendUrl: string, host: string): Promise<string> {
