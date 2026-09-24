@@ -1,7 +1,6 @@
 // Integration smoke test: stub backend + fake `claude`, no interactivity, no live services.
 // Covers the happy path (profile → materialize → exec argv) AND the hard version gate.
 import http from 'node:http'
-import { createHash } from 'node:crypto'
 import { mkdtempSync, writeFileSync, chmodSync, statSync, readFileSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { join } from 'node:path'
@@ -15,7 +14,7 @@ const exp = Math.floor(Date.now() / 1000) + 30 * 86400
 const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'u1', role: 'platform', exp })}.sig`
 
 const baseProfile = (minLauncherVersion) => ({
-  profileVersion: 1, minLauncherVersion, ttlSeconds: 300,
+  profileVersion: 1, minLauncherVersion,
   systemPrompt: '# mb-ai — Operating Manual (v1)\n\nYou are **mb-ai**…',
   mcpServers: {
     merchantbots: { type: 'http', url: 'http://x/mcp/merchantbots', headers: { Authorization: 'Bearer ${MB_TOKEN}' } },
@@ -28,15 +27,13 @@ const baseProfile = (minLauncherVersion) => ({
 
 async function serve(profile) {
   const bodyStr = JSON.stringify(profile)
-  const etag = '"' + createHash('sha256').update(bodyStr).digest('hex').slice(0, 16) + '"'
   const server = http.createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/api/v1/auth/login') {
       res.writeHead(200, { 'content-type': 'application/json' })
       return res.end(JSON.stringify({ access_token: jwt, token_type: 'bearer', role: 'platform' }))
     }
-    if (req.method === 'GET' && req.url === '/api/v1/harness/profile') {
-      if (req.headers['if-none-match'] === etag) { res.writeHead(304, { ETag: etag }); return res.end() }
-      res.writeHead(200, { 'content-type': 'application/json', ETag: etag, 'cache-control': 'max-age=300' })
+    if (req.method === 'GET' && req.url === '/api/v1/mb-harness/profile') {
+      res.writeHead(200, { 'content-type': 'application/json' })
       return res.end(bodyStr)
     }
     res.writeHead(404); res.end()
@@ -98,7 +95,7 @@ console.log('[B] hard version gate')
   const r = await runLauncher(s.port); s.close()
   ok(r.status !== 0, `non-zero exit (got ${r.status})`)
   ok(/too old/i.test(r.stderr), 'message says the launcher is too old')
-  ok(/npm (update|install)/i.test(r.stderr), 'message includes the update command')
+  ok(/npm i -g github:/i.test(r.stderr), 'message includes the GitHub install command')
   ok(r.args === null, 'claude was NOT executed')
   ok(r.servers === null, 'servers.json NOT written (blocked before materialize)')
 }

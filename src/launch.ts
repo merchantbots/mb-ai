@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import { execa } from 'execa'
-import { VERSION, PACKAGE_NAME } from './version'
+import { VERSION, INSTALL_COMMAND } from './version'
 import { MbError } from './errors'
 import { debug } from './log'
 import { serversJsonPath, ensureDirs } from './config'
@@ -32,9 +32,8 @@ export function assertLauncherVersion(minLauncherVersion: string): void {
   if (semverLt(VERSION, minLauncherVersion)) {
     throw new MbError(
       `mb-ai ${VERSION} is too old — this backend requires ${minLauncherVersion} or newer.\n` +
-        `  Please update, then re-run:\n` +
-        `    npm update -g ${PACKAGE_NAME}\n` +
-        `  (or reinstall the latest: npm install -g ${PACKAGE_NAME}@latest)`,
+        `  Update to the latest, then re-run:\n` +
+        `    ${INSTALL_COMMAND}`,
       'LAUNCHER_TOO_OLD',
       2,
     )
