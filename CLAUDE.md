@@ -13,13 +13,14 @@ npm run test:it        # builds, then runs the stub-backend + fake-claude smoke 
 
 mb-ai --backend-url http://localhost:8000   # auto-prompts login on first run
 mb-ai doctor
+mb-ai profile                               # dump the harness profile the backend returns (diagnostic)
 # headless / no keychain: set MB_AI_TOKEN=<jwt> to skip the prompt
 # hidden utilities: mb-ai login (pre-auth) · mb-ai logout (wipe token)
 ```
 
 ## Layout
 
-`src/index.ts` (commander entry) · `src/commands/` (run, login, logout, doctor). Core is flat in
+`src/index.ts` (commander entry) · `src/commands/` (run, login, logout, doctor, profile). Core is flat in
 `src/`: `config` (backend + on-disk paths) · `session` (keychain + JWT + login/token) · `profile`
 (zod schema + fetch) · `launch` (version gate + servers.json + exec claude) · `errors`
 (types + parseError) · `log` · `version`. Built bin: `dist/index.js`.
