@@ -3,8 +3,15 @@ import * as http from 'node:http'
 import * as https from 'node:https'
 import { resolveBackend } from '../config'
 import { tokenStatus } from '../session'
-import { fetchProfile } from '../profile'
+import { fetchProfile, type Profile } from '../profile'
+import { skillsStatus } from '../skills'
+import { semverLt } from '../launch'
 import { VERSION } from '../version'
+
+// Left-aligned label column shared by every line (continuations indent by the same width).
+const W = 12
+const label = (s: string) => s.padEnd(W)
+const cont = ' '.repeat(W)
 
 type ProbeResult = { status: number; location?: string } | { error: string }
 
@@ -38,6 +45,8 @@ function verdict(requestedUrl: string, r: ProbeResult): string {
   const { status, location } = r
   if (status >= 200 && status < 300) return `✓ reachable (${status})`
   if (status === 401 || status === 403) return `✓ reachable (${status}, needs auth)`
+  // MCP streamable-http endpoints reject a bare GET (they want POST / an SSE Accept) — still "up".
+  if (status === 405 || status === 406) return `✓ reachable (${status}, MCP endpoint up)`
   if (status >= 300 && status < 400) {
     const downgrade =
       !!location && new URL(requestedUrl).protocol === 'https:' && location.startsWith('http:')
@@ -47,39 +56,72 @@ function verdict(requestedUrl: string, r: ProbeResult): string {
   return `⚠ HTTP ${status}`
 }
 
-// Fetch the profile the backend serves and probe each MCP server URL from it.
-async function mcpLines(url: string, token: string | null): Promise<string[]> {
-  const label = 'mcp'.padEnd(12)
-  const cont = ''.padEnd(12)
-  if (!token) return [`${label}(log in to check endpoints)`]
-  let profile
-  try {
-    profile = await fetchProfile(url, token)
-  } catch (e) {
-    return [`${label}(couldn't fetch profile: ${e instanceof Error ? e.message : String(e)})`]
-  }
-  const entries = Object.entries(profile.mcpServers)
-  if (entries.length === 0) return [`${label}(no MCP servers in profile)`]
-  const width = Math.max(...entries.map(([name]) => name.length))
-  const results = await Promise.all(
-    entries.map(async ([name, server]) => `${name.padEnd(width)}  ${verdict(server.url, await probe(server.url))}`),
+// Everything a launch would hand to `claude`, derived from the fetched profile — so `doctor`
+// answers "what config do I actually run with?": version floor, model/flags, allowed tools, the
+// resolved skills plugin dir, and each MCP server's URL + reachability.
+async function configLines(profile: Profile, host: string): Promise<string[]> {
+  const out: string[] = []
+
+  const gated = semverLt(VERSION, profile.minLauncherVersion)
+  out.push(
+    `${label('profile')}v${profile.profileVersion}  ·  min launcher ${profile.minLauncherVersion}  ` +
+      (gated ? `✗ this launcher (${VERSION}) is below the floor — launch is blocked` : '✓'),
   )
-  return results.map((line, i) => `${i === 0 ? label : cont}${line}`)
+
+  const flags = profile.flags ?? {}
+  if (flags.model != null && flags.model !== false) out.push(`${label('model')}${flags.model}`)
+  if (flags['permission-mode'] != null && flags['permission-mode'] !== false)
+    out.push(`${label('mode')}${flags['permission-mode']}  (permission-mode)`)
+  const rest = Object.entries(flags).filter(
+    ([k, v]) => k !== 'model' && k !== 'permission-mode' && v !== null && v !== false,
+  )
+  if (rest.length)
+    out.push(`${label('flags')}${rest.map(([k, v]) => (v === true ? `--${k}` : `${k}=${v}`)).join(', ')}`)
+
+  out.push(`${label('prompt')}${profile.systemPrompt.length.toLocaleString()} chars (inline --system-prompt)`)
+  out.push(`${label('tools')}${profile.allowedTools.length ? profile.allowedTools.join(', ') : '(none)'}`)
+
+  const skills = skillsStatus(host, profile)
+  if (!skills) {
+    out.push(`${label('skills')}(none in profile)`)
+  } else {
+    out.push(
+      `${label('skills')}${skills.plugin} @ ${skills.commit.slice(0, 8)}  ` +
+        (skills.cached ? '(cached)' : '(not cached — downloads on next run)'),
+    )
+    out.push(`${cont}${skills.cached ? skills.pluginDir : skills.dir}`)
+  }
+
+  const servers = Object.entries(profile.mcpServers)
+  if (servers.length === 0) {
+    out.push(`${label('mcp')}(no MCP servers in profile)`)
+  } else {
+    const width = Math.max(...servers.map(([name]) => name.length))
+    const probes = await Promise.all(
+      servers.map(async ([name, s]) => ({ name, url: s.url, v: verdict(s.url, await probe(s.url)) })),
+    )
+    probes.forEach((p, i) => {
+      out.push(`${i === 0 ? label('mcp') : cont}${p.name.padEnd(width)}  ${p.v}`)
+      out.push(`${cont}${' '.repeat(width)}  ${p.url}`)
+    })
+  }
+
+  return out
 }
 
 export async function doctorCommand(opts: { backendUrl?: string }): Promise<void> {
   const { url, host } = resolveBackend(opts.backendUrl)
 
-  console.log(`mb-ai       ${VERSION}`)
-  console.log(`backend     ${url}`)
+  console.log(`${label('mb-ai')}${VERSION}`)
+  console.log(`${label('backend')}${url}`)
 
   const { token, source, expiresAt } = tokenStatus(host)
   if (!token) {
-    console.log('auth        not logged in  (run: mb-ai login)')
+    console.log(`${label('auth')}not logged in  (run: mb-ai login)`)
   } else {
     const days = expiresAt ? Math.round((expiresAt - Date.now()) / 86_400_000) : null
     const src = source === 'env' ? '  (MB_AI_TOKEN)' : ''
-    console.log(`auth        logged in${days != null ? ` (~${days}d left)` : ''}${src}`)
+    console.log(`${label('auth')}logged in${days != null ? ` (~${days}d left)` : ''}${src}`)
   }
 
   let claudeLine = 'not found on PATH  (npm i -g @anthropic-ai/claude-code)'
@@ -89,7 +131,18 @@ export async function doctorCommand(opts: { backendUrl?: string }): Promise<void
   } catch {
     // leave the not-found hint
   }
-  console.log(`claude      ${claudeLine}`)
+  console.log(`${label('claude')}${claudeLine}`)
 
-  for (const line of await mcpLines(url, token)) console.log(line)
+  // Below the blank line: exactly what `mb-ai` would launch `claude` with, from the live profile.
+  console.log('')
+  if (!token) {
+    console.log(`${label('config')}log in to preview the launch config`)
+    return
+  }
+  try {
+    const profile = await fetchProfile(url, token)
+    for (const line of await configLines(profile, host)) console.log(line)
+  } catch (e) {
+    console.log(`${label('config')}couldn't fetch profile: ${e instanceof Error ? e.message : String(e)}`)
+  }
 }

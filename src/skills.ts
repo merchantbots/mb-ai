@@ -41,6 +41,36 @@ interface State {
   artifact: string
 }
 
+export interface SkillsStatus {
+  plugin: string
+  commit: string
+  /** The cache root for this backend's bundles (~/.mb-ai/backends/<host>/skills). */
+  dir: string
+  /** Is the profile's commit already unpacked on disk? */
+  cached: boolean
+  /** The `--plugin-dir` path a launch would use, or null when not cached yet. */
+  pluginDir: string | null
+}
+
+/**
+ * Read-only view of what a launch would wire up for skills — no network, no download. Powers
+ * `mb-ai doctor`'s config preview. Returns null when the profile carries no skills to sync.
+ */
+export function skillsStatus(host: string, profile: Profile): SkillsStatus | null {
+  const skills = resolveSkills(profile)
+  if (!skills) return null
+  const dir = skillsDir(host)
+  const state = readState(join(dir, 'state.json'))
+  const cached = !!(state && state.commit === skills.commit && existsSync(join(dir, state.artifact)))
+  return {
+    plugin: skills.plugin,
+    commit: skills.commit,
+    dir,
+    cached,
+    pluginDir: cached && state ? pluginDirPath(dir, state.artifact) : null,
+  }
+}
+
 function readState(path: string): State | null {
   try {
     const j = JSON.parse(readFileSync(path, 'utf8'))

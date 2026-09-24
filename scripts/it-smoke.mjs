@@ -119,6 +119,19 @@ function runLauncher(port, { keepBackend = false } = {}) {
   })
 }
 
+// Run the `doctor` subcommand and capture its stdout (the config preview prints there).
+function runDoctor(port) {
+  return new Promise((resolve) => {
+    const child = spawn('node', ['dist/index.js', '--backend-url', `http://localhost:${port}`, 'doctor'], {
+      env: { ...process.env, MB_AI_TOKEN: jwt },
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    let stdout = ''
+    child.stdout.on('data', (d) => { stdout += d })
+    child.on('close', (code) => resolve({ status: code, stdout }))
+  })
+}
+
 // ── Case A: happy path (floor 0.1.0 == our version) ──────────────────────────
 console.log('[A] happy path')
 {
@@ -189,6 +202,25 @@ console.log('[C/D/E] skills plugin sync')
 
   s.close()
   rmSync(r1.backendDir, { recursive: true, force: true })
+}
+
+// ── Case F: `doctor` previews the launch config ──────────────────────────────
+console.log('[F] doctor config preview')
+{
+  const commit = 'cccccccccccccccccccccccccccccccccccccccc'
+  const s = await serve({ profile: withSkills(baseProfile('0.1.0'), 0, commit) })
+  s.state.profile = withSkills(baseProfile('0.1.0'), s.port, commit)
+  s.state.archive = pluginTarball(commit)
+  const d = await runDoctor(s.port)
+  ok(d.status === 0, `[F] exit 0 (got ${d.status})`)
+  ok(/^model\s+claude-opus-4-8/m.test(d.stdout), '[F] shows the model flag')
+  ok(/^mode\s+default\s+\(permission-mode\)/m.test(d.stdout), '[F] shows the permission mode')
+  ok(/^tools\s+mcp__merchantbots, mcp__metrics/m.test(d.stdout), '[F] lists the allowed MCP tools')
+  ok(/^skills\s+mb-skills @ cccccccc/m.test(d.stdout), '[F] shows the skills plugin + commit')
+  ok(d.stdout.includes(join('skills', commit)) || /not cached/.test(d.stdout), '[F] shows the skills directory / cache state')
+  ok(/merchantbots/.test(d.stdout) && /seller-metrics-engine/.test(d.stdout), '[F] shows each MCP server URL')
+  ok(s.state.downloads === 0, `[F] doctor is read-only — no skills download (got ${s.state.downloads})`)
+  s.close()
 }
 
 console.log(failures === 0 ? '\n✅ integration smoke: all passed' : `\n❌ integration smoke: ${failures} failed`)
