@@ -1,5 +1,5 @@
 // Typed errors → friendly messages + exit codes. index.ts catches MbError.
-import { c, sym, rule } from './ui'
+import { c, sym, rule, highlightJson } from './ui'
 
 export class MbError extends Error {
   constructor(
@@ -60,7 +60,7 @@ export function backendReport(e: ApiError, action = 'continue'): string {
   let body = raw || '(the backend sent no response body)'
   if (raw) {
     try {
-      body = JSON.stringify(JSON.parse(raw), null, 2)
+      body = highlightJson(JSON.parse(raw))
     } catch {
       // not JSON — share it verbatim
     }
