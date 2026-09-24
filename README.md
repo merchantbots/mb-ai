@@ -14,13 +14,13 @@ into `claude`, and hands off. The backend controls behavior — you just run `mb
 Install the global `mb-ai` command from GitHub (no npm registry — always the latest `main`):
 
 ```bash
-npm i -g github:equalcollective/mb-ai
+npm i -g github:merchantbots/mb-ai
 ```
 
 Or run it once, without installing:
 
 ```bash
-npx github:equalcollective/mb-ai
+npx github:merchantbots/mb-ai
 ```
 
 ## Usage
@@ -38,7 +38,7 @@ the OS keychain, namespaced per backend.
 There are no version tags — re-run the install to pull the latest `main`:
 
 ```bash
-npm i -g github:equalcollective/mb-ai
+npm i -g github:merchantbots/mb-ai
 ```
 
 If the backend requires a newer launcher than you have, mb-ai refuses to run and prints this
