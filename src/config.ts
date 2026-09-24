@@ -4,8 +4,9 @@ import { mkdirSync } from 'node:fs'
 import { MbError } from './errors'
 
 // ── Backend ──────────────────────────────────────────────────────────────────
-// TODO(open item): real production URL. Dev is http://localhost:8000 (pass via --backend-url).
-export const DEFAULT_BACKEND = 'https://api.mb.example.com'
+// Production default. For local dev, pass --backend-url http://localhost:8000
+// (or set MB_AI_BACKEND_URL).
+export const DEFAULT_BACKEND = 'https://api.merchantbots.com'
 
 export interface Backend {
   /** Base URL, no trailing slash. All paths are under `${url}/api/v1/...`. */

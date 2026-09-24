@@ -1,4 +1,5 @@
-// Keep in sync with package.json (bumped on release).
+// Keep in sync with package.json. Bump when raising the backend's minLauncherVersion floor,
+// so the version gate can tell an outdated install from a current one.
 export const VERSION = '0.1.0'
-// The package name used in the "please update" instruction; keep in sync with package.json "name".
-export const PACKAGE_NAME = 'mb-ai'
+// How users install/update the launcher: GitHub default branch — no npm registry, no tags.
+export const INSTALL_COMMAND = 'npm i -g github:equalcollective/mb-ai'

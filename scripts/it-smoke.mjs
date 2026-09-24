@@ -95,7 +95,7 @@ console.log('[B] hard version gate')
   const r = await runLauncher(s.port); s.close()
   ok(r.status !== 0, `non-zero exit (got ${r.status})`)
   ok(/too old/i.test(r.stderr), 'message says the launcher is too old')
-  ok(/npm (update|install)/i.test(r.stderr), 'message includes the update command')
+  ok(/npm i -g github:/i.test(r.stderr), 'message includes the GitHub install command')
   ok(r.args === null, 'claude was NOT executed')
   ok(r.servers === null, 'servers.json NOT written (blocked before materialize)')
 }
