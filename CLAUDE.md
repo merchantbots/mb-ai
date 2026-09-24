@@ -2,7 +2,7 @@
 
 Thin launcher that wraps the real `claude` CLI: on each run it fetches a harness profile from
 the backend (system prompt, MCP config, allowed-tools, flags), writes `servers.json`, and execs
-`claude`. The backend controls behavior; users install the launcher from GitHub (`main`).
+`claude`. The backend controls behavior; users install prebuilt tarballs from GitHub Releases.
 
 ## Commands
 
@@ -33,16 +33,20 @@ mb-ai doctor
 
 ## Releasing
 
-Distributed via GitHub, not npm — users run `npm i -g github:merchantbots/mb-ai`, which builds
-`main`'s HEAD via the `prepare` hook. No registry, no tags: updating is just re-running that
-command, so **`main` is the release** (CI gates every PR and push to it). `VERSION` is injected
-from `package.json` at build time (tsup `define`) — one place to bump.
+Distributed as prebuilt npm tarballs on GitHub Releases — not the npm registry, and **not** a
+`github:` git install (that builds on the user's machine and fails if their npm skips devDeps).
+To cut a release: bump `package.json`, commit, then `git tag vX.Y.Z && git push --tags`.
+`release.yml` builds, runs `npm pack` (bundles `dist/` via the `files` field), and uploads the
+tarball as both `mb-ai-X.Y.Z.tgz` (pinnable) and `mb-ai.tgz` (the "latest" asset). Users install
+with `npm i -g <asset-url>` — no build step. `VERSION` is injected from `package.json` at build
+(tsup `define`), so the tag, `package.json`, and `--version` all agree.
 
 The version gate is a *mandatory floor*, not an "update available" notice: it only fires when a
-launcher is below the backend's `minLauncherVersion`, and ordinary changes reach users only when
-they choose to reinstall. To force an update, move BOTH together — bump `package.json` on `main`
-**and** raise the backend's `minLauncherVersion` to match. Raising the backend floor above the
-version `main` reports bricks everyone, fresh installs included (reinstalling can't escape it).
+launcher is below the backend's `minLauncherVersion`, and ordinary releases reach users only when
+they reinstall. To force an update, move BOTH together — ship a release whose `package.json`
+version is X.Y.Z **and** raise the backend's `minLauncherVersion` to X.Y.Z. Never raise the
+backend floor above the newest published release, or every launcher (fresh installs included)
+gets gated with no version able to satisfy it.
 
 ## Commits
 
