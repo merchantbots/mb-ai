@@ -24,7 +24,12 @@ mb-ai profile                               # dump the harness profile the backe
 `src/`: `config` (backend + on-disk paths) · `session` (keychain + JWT + login/token) · `profile`
 (zod schema + fetch) · `launch` (version gate + servers.json + exec claude) · `skills` (download +
 cache the plugin bundle → `--plugin-dir`) · `errors` (types + parseError + `backendReport`, the
-share-with-the-team dump for backend 5xx) · `log` · `version`. Built bin: `dist/index.js`.
+share-with-the-team dump for backend 5xx) · `ui` (picocolors theme: `c`, `sym`, `label`, `rule` —
+the one place color/formatting lives) · `log` · `version`. Built bin: `dist/index.js`.
+
+Terminal output goes through `src/ui.ts` so it's styled consistently. picocolors auto-disables color
+for non-TTY / `NO_COLOR` / CI, so piped output stays plain — the smoke test sets `NO_COLOR=1` to keep
+assertions stable. It's a bundled `dependency` (tsup inlines it into `dist`), not `external`.
 
 ## Gotchas (verified vs claude 2.1.280)
 

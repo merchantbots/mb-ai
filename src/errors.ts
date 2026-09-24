@@ -1,4 +1,5 @@
 // Typed errors → friendly messages + exit codes. index.ts catches MbError.
+import { c, sym, rule } from './ui'
 
 export class MbError extends Error {
   constructor(
@@ -55,8 +56,6 @@ export class ApiError extends MbError {
  * carries the trace id and the server-side detail). Pretty-prints the body when it's JSON.
  */
 export function backendReport(e: ApiError, action = 'continue'): string {
-  const line = (label?: string) =>
-    label ? `── ${label} ` + '─'.repeat(Math.max(4, 58 - label.length)) : '─'.repeat(62)
   const raw = e.raw?.trim()
   let body = raw || '(the backend sent no response body)'
   if (raw) {
@@ -68,15 +67,15 @@ export function backendReport(e: ApiError, action = 'continue'): string {
   }
   return [
     ``,
-    `✗ The backend returned an error, so mb-ai can't ${action}.`,
+    `${sym.err} ${c.red(`The backend returned an error, so mb-ai can't ${action}.`)}`,
     `  ${e.detail()}`,
     ``,
-    `  This is a problem on the backend, not on your machine. Please copy the block`,
-    `  below and send it to the MerchantBots tech team so they can debug it:`,
+    `  ${c.yellow('This is a problem on the backend, not on your machine.')} Please copy the`,
+    `  block below and send it to the MerchantBots tech team so they can debug it:`,
     ``,
-    line('backend response'),
+    rule('backend response'),
     body,
-    line(),
+    rule(),
   ].join('\n')
 }
 
