@@ -126,8 +126,15 @@ function runLauncher(port, { keepBackend = false } = {}) {
 
 // Run the `doctor` subcommand and capture its stdout (the config preview prints there).
 function runDoctor(port) {
+  return runSub(port, 'doctor')
+}
+// Run the `profile` subcommand and capture its stdout (the JSON dump prints there).
+function runProfile(port) {
+  return runSub(port, 'profile')
+}
+function runSub(port, sub) {
   return new Promise((resolve) => {
-    const child = spawn('node', ['dist/index.js', '--backend-url', `http://localhost:${port}`, 'doctor'], {
+    const child = spawn('node', ['dist/index.js', '--backend-url', `http://localhost:${port}`, sub], {
       env: { ...process.env, MB_AI_TOKEN: jwt, NO_COLOR: '1' },
       stdio: ['ignore', 'pipe', 'ignore'],
     })
@@ -249,6 +256,19 @@ console.log('[G] backend error → shareable report')
 
   const d = await runDoctor(s.port); s.close()
   ok(/tech team/i.test(d.stdout) && /trace-abc-123/.test(d.stdout), '[G] doctor shows the same shareable report')
+}
+
+// ── Case H: `mb-ai profile` prints valid, pretty JSON (highlight is pipe-safe) ──
+console.log('[H] profile prints valid JSON')
+{
+  const s = await serve({ profile: baseProfile('0.1.0') })
+  const p = await runProfile(s.port); s.close()
+  ok(p.status === 0, `[H] exit 0 (got ${p.status})`)
+  let parsed = null
+  try { parsed = JSON.parse(p.stdout) } catch {}
+  ok(parsed !== null, '[H] NO_COLOR output is valid JSON (pipe-safe)')
+  ok(parsed?.profileVersion === 1 && !!parsed?.mcpServers?.merchantbots, '[H] round-trips the profile fields')
+  ok(/\n  "profileVersion":/.test(p.stdout), '[H] pretty-printed (2-space indent)')
 }
 
 console.log(failures === 0 ? '\n✅ integration smoke: all passed' : `\n❌ integration smoke: ${failures} failed`)
