@@ -100,8 +100,9 @@ function runLauncher(port, { keepBackend = false } = {}) {
   chmodSync(join(dir, 'claude'), 0o755)
   return new Promise((resolve) => {
     const child = spawn('node', ['dist/index.js', '--backend-url', `http://localhost:${port}`], {
-      // MB_AI_TOKEN skips interactive login (and cross-process keychain prompts)
-      env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, MB_AI_TOKEN: jwt },
+      // MB_AI_TOKEN skips interactive login (and cross-process keychain prompts).
+      // NO_COLOR keeps output plain so assertions match regardless of the runner's TTY/FORCE_COLOR.
+      env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, MB_AI_TOKEN: jwt, NO_COLOR: '1' },
       stdio: ['ignore', 'ignore', 'pipe'],
     })
     let stderr = ''
@@ -127,7 +128,7 @@ function runLauncher(port, { keepBackend = false } = {}) {
 function runDoctor(port) {
   return new Promise((resolve) => {
     const child = spawn('node', ['dist/index.js', '--backend-url', `http://localhost:${port}`, 'doctor'], {
-      env: { ...process.env, MB_AI_TOKEN: jwt },
+      env: { ...process.env, MB_AI_TOKEN: jwt, NO_COLOR: '1' },
       stdio: ['ignore', 'pipe', 'ignore'],
     })
     let stdout = ''

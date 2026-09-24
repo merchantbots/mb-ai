@@ -1,6 +1,7 @@
 import { Command } from 'commander'
 import { VERSION } from './version'
 import { setVerbose } from './log'
+import { c, sym } from './ui'
 import { MbError, ApiError, backendReport } from './errors'
 import { run } from './commands/run'
 import { loginCommand } from './commands/login'
@@ -55,6 +56,6 @@ program.parseAsync().catch((e: unknown) => {
   const message =
     e instanceof ApiError ? e.detail() : e instanceof Error ? e.message : String(e)
   const exitCode = e instanceof MbError ? e.exitCode : 1
-  console.error(`\nmb-ai: ${message}`)
+  console.error(`\n${sym.err} ${c.red('mb-ai')}: ${message}`)
   process.exit(exitCode)
 })

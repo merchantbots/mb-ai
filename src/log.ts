@@ -1,3 +1,5 @@
+import { c, sym } from './ui'
+
 // All launcher chatter goes to stderr so stdout stays clean for the `claude` child.
 let verbose = false
 
@@ -10,9 +12,9 @@ export function info(msg: string) {
 }
 
 export function warn(msg: string) {
-  console.error(`! ${msg}`)
+  console.error(`${sym.warn} ${c.yellow(msg)}`)
 }
 
 export function debug(msg: string) {
-  if (verbose) console.error(`· ${msg}`)
+  if (verbose) console.error(c.dim(`· ${msg}`))
 }
