@@ -1,6 +1,6 @@
 {
   "name": "mb-ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MerchantBots harness launcher — wraps Claude Code with the mb-ai profile.",
   "type": "module",
   "bin": { "mb-ai": "dist/index.js" },
