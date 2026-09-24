@@ -1,0 +1,33 @@
+name: Release
+
+# Cut a release by pushing a version tag: `git tag v0.2.0 && git push --tags`.
+# Publishes a prebuilt npm tarball (npm pack bundles dist/ via the `files` field) to a
+# GitHub Release, so users install with no build step: `npm i -g <release-asset-url>`.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the release + upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:it
+      - name: Build the prebuilt tarball
+        run: |
+          npm pack
+          # npm pack emits mb-ai-<version>.tgz; also expose a stable name for the "latest" URL
+          cp mb-ai-*.tgz mb-ai.tgz
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" mb-ai-*.tgz mb-ai.tgz --title "$GITHUB_REF_NAME" --generate-notes
