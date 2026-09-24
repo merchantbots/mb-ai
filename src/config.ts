@@ -52,6 +52,11 @@ export function serversJsonPath(host: string): string {
   return join(cacheDir(host), 'servers.json')
 }
 
+/** Where the backend's skills plugin bundle is cached (content-addressed by commit). */
+export function skillsDir(host: string): string {
+  return join(backendDir(host), 'skills')
+}
+
 export function ensureDirs(host: string): void {
   mkdirSync(cacheDir(host), { recursive: true })
 }
