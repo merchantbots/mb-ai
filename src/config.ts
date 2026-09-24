@@ -47,10 +47,6 @@ export function cacheDir(host: string): string {
   return join(backendDir(host), 'cache')
 }
 
-export function profileCachePath(host: string): string {
-  return join(cacheDir(host), 'profile.json')
-}
-
 export function serversJsonPath(host: string): string {
   return join(cacheDir(host), 'servers.json')
 }

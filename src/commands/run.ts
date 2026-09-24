@@ -25,14 +25,14 @@ export async function run(opts: { backendUrl?: string }): Promise<void> {
   }
 
   // 2. fetch profile; on a 401 re-login once and retry
-  let result
+  let profile
   try {
-    result = await fetchProfile(url, host, token)
+    profile = await fetchProfile(url, token)
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) {
       warn('Token rejected by the backend — logging in again.')
       token = await doLogin(url, host)
-      result = await fetchProfile(url, host, token)
+      profile = await fetchProfile(url, token)
     } else if (e instanceof ApiError && e.status === 403) {
       throw new MbError(
         `This account can't use mb-ai (${e.apiCode}). A platform-role user is required.`,
@@ -44,9 +44,7 @@ export async function run(opts: { backendUrl?: string }): Promise<void> {
     }
   }
 
-  const { profile, fromCache, stale } = result
-  if (stale) warn('Backend unreachable — using the last cached profile.')
-  debug(`profile v${profile.profileVersion}${fromCache ? ' (cache)' : ''}, ${Object.keys(profile.mcpServers).length} MCP server(s)`)
+  debug(`profile v${profile.profileVersion}, ${Object.keys(profile.mcpServers).length} MCP server(s)`)
 
   // 3. hard version gate — refuse (no self-update) if the launcher is below the floor
   assertLauncherVersion(profile.minLauncherVersion)
