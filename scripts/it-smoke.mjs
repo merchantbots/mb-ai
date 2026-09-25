@@ -152,7 +152,7 @@ console.log('[A] happy path')
   ok(r.status === 0, `exit 0 (got ${r.status})`)
   ok(r.args?.includes('--system-prompt'), '--system-prompt passed')
   ok(r.args?.some((a) => a.startsWith('# mb-ai')), 'system prompt passed inline (string)')
-  ok(r.args?.includes('--mcp-config') && r.args?.includes('--strict-mcp-config'), '--mcp-config + --strict-mcp-config')
+  ok(r.args?.includes('--mcp-config') && r.args?.includes('--strict-mcp-config'), '--mcp-config + --strict-mcp-config (default ON when profile silent)')
   ok(r.args?.includes('--model') && r.args?.includes('claude-opus-4-8'), 'flags applied (--model)')
   ok(r.args?.includes('mcp__merchantbots') && r.args?.includes('mcp__metrics'), 'server-level allowed-tools passed')
   const at = r.args ? r.args.indexOf('--allowed-tools') : -1
@@ -160,6 +160,20 @@ console.log('[A] happy path')
   ok(!r.args?.includes('--plugin-dir'), 'no --plugin-dir when skills carry no commit/downloadUrl')
   ok(r.servers?.mode === '600', `servers.json is mode 600 (got ${r.servers?.mode})`)
   ok(!!r.servers && r.servers.body.includes(jwt) && !r.servers.body.includes('${MB_TOKEN}'), 'bearer substituted (no placeholder left)')
+}
+
+// ── Case A2: backend turns MCP isolation OFF ──────────────────────────────────
+// `strict-mcp-config: false` in the profile flags → the launcher omits
+// --strict-mcp-config, so claude also loads the user's own MCP servers.
+console.log('[A2] backend disables --strict-mcp-config')
+{
+  const p = baseProfile('0.1.0')
+  p.flags = { ...p.flags, 'strict-mcp-config': false }
+  const s = await serve({ profile: p })
+  const r = await runLauncher(s.port); s.close()
+  ok(r.status === 0, `exit 0 (got ${r.status})`)
+  ok(r.args?.includes('--mcp-config'), '--mcp-config still passed (our servers.json)')
+  ok(!r.args?.includes('--strict-mcp-config'), '--strict-mcp-config omitted when profile sets it false')
 }
 
 // ── Case B: hard version gate (floor 9.9.9 > our version) ─────────────────────
