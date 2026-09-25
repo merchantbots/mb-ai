@@ -80,8 +80,13 @@ export function buildArgs(profile: Profile, serversPath: string, pluginDirs: str
   // system prompt: inline string (not secret)
   args.push('--system-prompt', profile.systemPrompt)
 
-  // MCP: our file only, token already baked in
-  args.push('--mcp-config', serversPath, '--strict-mcp-config')
+  // MCP: our servers.json always (token already baked in). Isolation
+  // (`--strict-mcp-config`, which makes claude ignore the user's own MCP config)
+  // is backend-controlled via the profile flag: defaults ON when the profile is
+  // silent, and the flags loop below emits/omits it when it's set explicitly
+  // (true → bare flag, false → skipped).
+  args.push('--mcp-config', serversPath)
+  if (!('strict-mcp-config' in (profile.flags ?? {}))) args.push('--strict-mcp-config')
 
   // backend-supplied flags (model, permission-mode, …)
   for (const [key, value] of Object.entries(profile.flags ?? {})) {
