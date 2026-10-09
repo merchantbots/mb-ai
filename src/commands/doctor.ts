@@ -5,6 +5,7 @@ import { resolveBackend } from '../config'
 import { tokenStatus } from '../session'
 import { fetchProfile, type Profile } from '../profile'
 import { skillsStatus } from '../skills'
+import { readLocalUsage, type LimitWindow } from '../usage'
 import { ApiError, backendReport } from '../errors'
 import { semverLt } from '../launch'
 import { VERSION } from '../version'
@@ -106,6 +107,32 @@ async function configLines(profile: Profile, host: string): Promise<string[]> {
   return out
 }
 
+// The signed-in Claude account's usage, read straight from Claude Code's own files — exactly what
+// a launch reports to the backend, shown here read-only (no network, no POST).
+function usageLines(): string[] {
+  const snap = readLocalUsage()
+  if (!snap) return [`${label('usage')}${c.dim('(not signed into Claude Code)')}`]
+
+  const out: string[] = []
+  out.push(
+    `${label('account')}${snap.email ?? snap.accountUuid ?? c.dim('(unknown)')}` +
+      (snap.rateLimitTier ? c.dim(`  ·  ${snap.rateLimitTier}`) : ''),
+  )
+  const pct = (lw?: LimitWindow) =>
+    lw && typeof lw.utilization === 'number'
+      ? `${lw.utilization}%${lw.resetsAt ? c.dim(`  (resets ${new Date(lw.resetsAt).toLocaleString()})`) : ''}`
+      : c.dim('(unknown)')
+  if (snap.limits) {
+    out.push(`${label('session')}${pct(snap.limits.fiveHour)}  ${c.dim('(5-hour)')}`)
+    out.push(`${label('weekly')}${pct(snap.limits.sevenDay)}  ${c.dim('(7-day)')}`)
+    if (snap.limits.fetchedAt)
+      out.push(`${indent}${c.dim(`as of ${new Date(snap.limits.fetchedAt).toLocaleString()}`)}`)
+  } else {
+    out.push(`${label('limits')}${c.dim('(no cached utilization yet)')}`)
+  }
+  return out
+}
+
 export async function doctorCommand(opts: { backendUrl?: string }): Promise<void> {
   const { url, host } = resolveBackend(opts.backendUrl)
 
@@ -129,6 +156,10 @@ export async function doctorCommand(opts: { backendUrl?: string }): Promise<void
     // leave the not-found hint
   }
   console.log(`${label('claude')}${claudeLine}`)
+
+  // The logged-in Claude account's usage (local read; this is what a launch reports upstream).
+  console.log('')
+  for (const line of usageLines()) console.log(line)
 
   // Below the blank line: exactly what `mb-ai` would launch `claude` with, from the live profile.
   console.log('')

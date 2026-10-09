@@ -21,6 +21,14 @@ const Skills = z
   })
   .passthrough()
 
+// Usage-reporting config, set system-wide by the backend. `reportIntervalMs` is the throttle: the
+// launcher POSTs an account's usage at most once per this window (defaults to 2h when unset).
+const Usage = z
+  .object({
+    reportIntervalMs: z.number().optional(),
+  })
+  .passthrough()
+
 export const ProfileSchema = z
   .object({
     profileVersion: z.number(),
@@ -29,6 +37,7 @@ export const ProfileSchema = z
     mcpServers: z.record(McpServer),
     allowedTools: z.array(z.string()),
     skills: Skills.optional(),
+    usage: Usage.optional(),
     flags: z
       .record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
       .optional(),
