@@ -14,6 +14,33 @@ const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url')
 const exp = Math.floor(Date.now() / 1000) + 30 * 86400
 const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'u1', role: 'platform', exp })}.sig`
 
+// Hermetic defaults: every launch points Claude-state reads at files that don't exist, so the
+// launcher never touches the real ~/.claude* and never reports usage unless a case opts in.
+const NO_CLAUDE = join(tmpdir(), 'mbai-nonexistent-claude.json')
+
+// A throwaway ~/.claude.json fixture for the usage-reporting cases.
+function claudeFixture() {
+  const dir = mkdtempSync(join(tmpdir(), 'mbai-claude-'))
+  const cfgPath = join(dir, 'claude.json')
+  writeFileSync(cfgPath, JSON.stringify({
+    machineID: 'machine-xyz',
+    oauthAccount: {
+      emailAddress: 'u@example.com', accountUuid: 'acc-1', organizationName: 'Org',
+      organizationRole: 'admin', organizationRateLimitTier: 'default_claude_max_20x',
+    },
+    cachedUsageUtilization: {
+      fetchedAtMs: 1700000000000, accountUuid: 'acc-1',
+      utilization: {
+        five_hour: { utilization: 39, resets_at: '2026-10-07T21:00:00Z' },
+        seven_day: { utilization: 50, resets_at: '2026-10-09T19:00:00Z' },
+        limits: [{ kind: 'session', group: 'session', percent: 39 }],
+      },
+    },
+  }))
+  return { dir, cfgPath }
+}
+
+// Force a report on this launch: pin the backend's interval to 0 so nothing is throttled.
 const baseProfile = (minLauncherVersion) => ({
   profileVersion: 1, minLauncherVersion,
   systemPrompt: '# mb-ai — Operating Manual (v1)\n\nYou are **mb-ai**…',
@@ -25,6 +52,9 @@ const baseProfile = (minLauncherVersion) => ({
   skills: { plugin: 'mb-skills', version: 'DUMMY' },
   flags: { model: 'claude-opus-4-8', 'permission-mode': 'default' },
 })
+
+// Force a report on this launch: pin the backend's interval to 0 so nothing is throttled.
+const reportNow = (minLauncherVersion) => ({ ...baseProfile(minLauncherVersion), usage: { reportIntervalMs: 0 } })
 
 // Point the profile at the stub's download route for a given commit (git-archive style bundle).
 const withSkills = (profile, port, commit) => ({
@@ -57,7 +87,7 @@ function pluginTarball(commit) {
 // Stub backend with mutable state so ONE server (one port → one on-disk backend dir) can serve an
 // updated profile/archive across runs — needed to exercise cache reuse and re-download.
 async function serve(initial) {
-  const state = { downloads: 0, unauth: 0, archive: Buffer.alloc(0), ...initial }
+  const state = { downloads: 0, unauth: 0, archive: Buffer.alloc(0), usage: [], ...initial }
   const server = http.createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/api/v1/auth/login') {
       res.writeHead(200, { 'content-type': 'application/json' })
@@ -78,6 +108,21 @@ async function serve(initial) {
       res.writeHead(200, { 'content-type': 'application/json' })
       return res.end(JSON.stringify(state.profile))
     }
+    // Usage reporting sink: record each posted body (or simulate a failure via state.usageError).
+    if (req.method === 'POST' && req.url === '/api/v1/mb-harness/usage') {
+      let raw = ''
+      req.on('data', (d) => (raw += d))
+      req.on('end', () => {
+        if (state.usageError) {
+          res.writeHead(state.usageError, { 'content-type': 'application/json' })
+          return res.end(JSON.stringify({ code: 'ERR', message: 'usage boom' }))
+        }
+        try { state.usage.push(JSON.parse(raw)) } catch { state.usage.push(null) }
+        res.writeHead(204)
+        res.end()
+      })
+      return
+    }
     if (req.method === 'GET' && req.url.startsWith('/api/v1/mb-harness/skills/download')) {
       state.downloads++
       res.writeHead(200, { 'content-type': 'application/gzip' })
@@ -91,7 +136,7 @@ async function serve(initial) {
 
 // async spawn (NOT spawnSync) so the in-process stub server's event loop stays free to respond.
 // keepBackend leaves ~/.mb-ai/backends/<host> in place so a later run can hit the skills cache.
-function runLauncher(port, { keepBackend = false } = {}) {
+function runLauncher(port, { keepBackend = false, env: extraEnv = {} } = {}) {
   const seg = `localhost:${port}`.replace(/[^a-zA-Z0-9._-]/g, '_')
   const backendDir = join(homedir(), '.mb-ai', 'backends', seg)
   const dir = mkdtempSync(join(tmpdir(), 'mbai-it-'))
@@ -102,7 +147,11 @@ function runLauncher(port, { keepBackend = false } = {}) {
     const child = spawn('node', ['dist/index.js', '--backend-url', `http://localhost:${port}`], {
       // MB_AI_TOKEN skips interactive login (and cross-process keychain prompts).
       // NO_COLOR keeps output plain so assertions match regardless of the runner's TTY/FORCE_COLOR.
-      env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, MB_AI_TOKEN: jwt, NO_COLOR: '1' },
+      // MB_AI_CLAUDE_* keep usage reads hermetic (overridden by cases that exercise reporting).
+      env: {
+        ...process.env, PATH: `${dir}:${process.env.PATH}`, MB_AI_TOKEN: jwt, NO_COLOR: '1',
+        MB_AI_CLAUDE_CONFIG: NO_CLAUDE, ...extraEnv,
+      },
       stdio: ['ignore', 'ignore', 'pipe'],
     })
     let stderr = ''
@@ -125,17 +174,20 @@ function runLauncher(port, { keepBackend = false } = {}) {
 }
 
 // Run the `doctor` subcommand and capture its stdout (the config preview prints there).
-function runDoctor(port) {
-  return runSub(port, 'doctor')
+function runDoctor(port, env = {}) {
+  return runSub(port, 'doctor', env)
 }
 // Run the `profile` subcommand and capture its stdout (the JSON dump prints there).
 function runProfile(port) {
   return runSub(port, 'profile')
 }
-function runSub(port, sub) {
+function runSub(port, sub, extraEnv = {}) {
   return new Promise((resolve) => {
     const child = spawn('node', ['dist/index.js', '--backend-url', `http://localhost:${port}`, sub], {
-      env: { ...process.env, MB_AI_TOKEN: jwt, NO_COLOR: '1' },
+      env: {
+        ...process.env, MB_AI_TOKEN: jwt, NO_COLOR: '1',
+        MB_AI_CLAUDE_CONFIG: NO_CLAUDE, ...extraEnv,
+      },
       stdio: ['ignore', 'pipe', 'ignore'],
     })
     let stdout = ''
@@ -283,6 +335,65 @@ console.log('[H] profile prints valid JSON')
   ok(parsed !== null, '[H] NO_COLOR output is valid JSON (pipe-safe)')
   ok(parsed?.profileVersion === 1 && !!parsed?.mcpServers?.merchantbots, '[H] round-trips the profile fields')
   ok(/\n  "profileVersion":/.test(p.stdout), '[H] pretty-printed (2-space indent)')
+}
+
+// ── Case I: usage reporting (reads ~/.claude.json, POSTs the account's limits, prints a summary) ─
+console.log('[I] usage reporting')
+{
+  const fix = claudeFixture()
+  // The backend pins the report interval to 0 (system-wide), so this launch always reports.
+  const s = await serve({ profile: reportNow('0.1.0') })
+  const r = await runLauncher(s.port, { env: { MB_AI_CLAUDE_CONFIG: fix.cfgPath } })
+  ok(r.status === 0, `[I] exit 0 (got ${r.status})`)
+  ok(r.args?.includes('--system-prompt'), '[I] claude still launched after reporting')
+  ok(s.state.usage.length === 1, `[I] reported usage exactly once (got ${s.state.usage.length})`)
+  ok(s.state.unauth === 0, '[I] usage POST carried the Authorization bearer (no 401s)')
+  const body = s.state.usage[0]
+  ok(body?.email === 'u@example.com' && body?.accountUuid === 'acc-1', '[I] body carries the per-account identity')
+  ok(body?.machineId === 'machine-xyz' && body?.rateLimitTier === 'default_claude_max_20x', '[I] body carries machineId + rate-limit tier')
+  ok(body?.limits?.fiveHour?.utilization === 39 && body?.limits?.sevenDay?.utilization === 50, '[I] body carries session (5h) + weekly (7d) utilization')
+  ok(body?.limits?.stale === undefined, '[I] no stale flag in the body (removed)')
+  ok(body?.tokens === undefined, '[I] no token/stats-cache data in the body (removed)')
+  ok(typeof body?.reportedAt === 'string' && typeof body?.launcherVersion === 'string', '[I] body stamps reportedAt + launcherVersion')
+  ok(/usage · u@example\.com/.test(r.stderr), '[I] prints a one-line usage summary to the terminal')
+
+  // doctor shows the same snapshot read-only (no extra POST)
+  const d = await runDoctor(s.port, { MB_AI_CLAUDE_CONFIG: fix.cfgPath })
+  ok(/^account\s+u@example\.com/m.test(d.stdout), '[I] doctor shows the signed-in account')
+  ok(/^session\s+39%/m.test(d.stdout), '[I] doctor shows session (5-hour) utilization')
+  ok(/^weekly\s+50%/m.test(d.stdout), '[I] doctor shows weekly (7-day) utilization')
+  ok(!/^tokens/m.test(d.stdout), '[I] doctor shows no machine-wide tokens line (removed)')
+  ok(s.state.usage.length === 1, '[I] doctor is read-only — did NOT post usage')
+
+  s.close()
+  rmSync(fix.dir, { recursive: true, force: true })
+}
+
+// ── Case J: no signed-in Claude account → usage skipped, launch unaffected ────
+console.log('[J] no Claude account → usage skipped')
+{
+  // Interval 0 (never throttled) proves it's the absent ~/.claude.json, not the throttle, that
+  // suppresses the report — the hermetic default points MB_AI_CLAUDE_CONFIG at a missing file.
+  const s = await serve({ profile: reportNow('0.1.0') })
+  const r = await runLauncher(s.port)
+  s.close()
+  ok(r.status === 0, `[J] exit 0 (got ${r.status})`)
+  ok(r.args?.includes('--system-prompt'), '[J] claude still launched')
+  ok(s.state.usage.length === 0, `[J] no usage reported when not signed into Claude (got ${s.state.usage.length})`)
+  ok(!/usage ·/.test(r.stderr), '[J] no usage summary line printed')
+}
+
+// ── Case K: usage endpoint fails → launch still succeeds (telemetry never blocks) ─
+console.log('[K] usage endpoint fails → launch unaffected')
+{
+  const fix = claudeFixture()
+  const s = await serve({ profile: reportNow('0.1.0') })
+  s.state.usageError = 500
+  const r = await runLauncher(s.port, { env: { MB_AI_CLAUDE_CONFIG: fix.cfgPath } })
+  s.close()
+  ok(r.status === 0, `[K] launch exits 0 despite usage HTTP 500 (got ${r.status})`)
+  ok(r.args?.includes('--system-prompt'), '[K] claude still launched despite the failed report')
+  rmSync(fix.dir, { recursive: true, force: true })
 }
 
 console.log(failures === 0 ? '\n✅ integration smoke: all passed' : `\n❌ integration smoke: ${failures} failed`)

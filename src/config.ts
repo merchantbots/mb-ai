@@ -57,6 +57,21 @@ export function skillsDir(host: string): string {
   return join(backendDir(host), 'skills')
 }
 
+/** Per-backend throttle state for usage reporting (last-reported timestamp per account). */
+export function usageStatePath(host: string): string {
+  return join(backendDir(host), 'usage-state.json')
+}
+
 export function ensureDirs(host: string): void {
   mkdirSync(cacheDir(host), { recursive: true })
+}
+
+// ── Claude Code's own on-disk file ─────────────────────────────────────────────
+// We read (never write) `~/.claude.json` to learn the logged-in account and its rate-limit usage.
+// The path is overridable by env — handy for diagnostics and required by the smoke test, which
+// must never touch the real file.
+
+/** `~/.claude.json` — carries `oauthAccount` (the signed-in email) and `cachedUsageUtilization`. */
+export function claudeConfigPath(): string {
+  return process.env.MB_AI_CLAUDE_CONFIG || join(homedir(), '.claude.json')
 }
