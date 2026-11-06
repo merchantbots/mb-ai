@@ -5,7 +5,7 @@ import { resolveBackend } from '../config'
 import { tokenStatus } from '../session'
 import { fetchProfile, type Profile } from '../profile'
 import { skillsStatus } from '../skills'
-import { readLocalUsage, type LimitWindow } from '../usage'
+import { readLocalUsage, isCurrentWeek } from '../usage'
 import { ApiError, backendReport } from '../errors'
 import { semverLt } from '../launch'
 import { VERSION } from '../version'
@@ -107,8 +107,8 @@ async function configLines(profile: Profile, host: string): Promise<string[]> {
   return out
 }
 
-// The signed-in Claude account's usage, read straight from Claude Code's own files — exactly what
-// a launch reports to the backend, shown here read-only (no network, no POST).
+// The signed-in Claude account and its latest weekly reading — exactly what a launch reports to
+// the backend, shown here read-only (no network, no POST).
 function usageLines(): string[] {
   const snap = readLocalUsage()
   if (!snap) return [`${label('usage')}${c.dim('(not signed into Claude Code)')}`]
@@ -118,18 +118,18 @@ function usageLines(): string[] {
     `${label('account')}${snap.email ?? snap.accountUuid ?? c.dim('(unknown)')}` +
       (snap.rateLimitTier ? c.dim(`  ·  ${snap.rateLimitTier}`) : ''),
   )
-  const pct = (lw?: LimitWindow) =>
-    lw && typeof lw.utilization === 'number'
-      ? `${lw.utilization}%${lw.resetsAt ? c.dim(`  (resets ${new Date(lw.resetsAt).toLocaleString()})`) : ''}`
-      : c.dim('(unknown)')
-  if (snap.limits) {
-    out.push(`${label('session')}${pct(snap.limits.fiveHour)}  ${c.dim('(5-hour)')}`)
-    out.push(`${label('weekly')}${pct(snap.limits.sevenDay)}  ${c.dim('(7-day)')}`)
-    if (snap.limits.fetchedAt)
-      out.push(`${indent}${c.dim(`as of ${new Date(snap.limits.fetchedAt).toLocaleString()}`)}`)
+  const week = snap.limits?.sevenDay
+  if (isCurrentWeek(week)) {
+    const resets = week.resetsAt ? c.dim(`  (resets ${new Date(week.resetsAt).toLocaleString()})`) : ''
+    out.push(`${label('weekly')}${week.utilization}%${resets}  ${c.dim('(7-day)')}`)
+  } else if (week?.resetsAt) {
+    // The last reading belongs to a week that has since reset — its % no longer applies.
+    out.push(`${label('weekly')}${c.dim(`(reset ${new Date(week.resetsAt).toLocaleString()} — no reading since)`)}`)
   } else {
-    out.push(`${label('limits')}${c.dim('(no cached utilization yet)')}`)
+    out.push(`${label('weekly')}${c.dim('(no reading yet — it appears after the first reply in an mb-ai session)')}`)
   }
+  if (snap.limits?.fetchedAt)
+    out.push(`${indent}${c.dim(`as of ${new Date(snap.limits.fetchedAt).toLocaleString()}`)}`)
   return out
 }
 
