@@ -57,9 +57,19 @@ export function skillsDir(host: string): string {
   return join(backendDir(host), 'skills')
 }
 
-/** Per-backend throttle state for usage reporting (last-reported timestamp per account). */
+/** Per-backend throttle state for usage reporting (last report + last reading, per account). */
 export function usageStatePath(host: string): string {
   return join(backendDir(host), 'usage-state.json')
+}
+
+/**
+ * Where the harness status line records Claude's live rate limits for the usage reporter. The
+ * launcher hands this path to `claude` as `MB_AI_RATE_LIMITS_FILE`; the backend-served status line
+ * writes `{observedAt, accountUuid, rateLimits}` there. Not per backend: a reading belongs to a
+ * Claude account. The env var overrides it (the smoke test points it at a temp file).
+ */
+export function rateLimitsPath(): string {
+  return process.env.MB_AI_RATE_LIMITS_FILE || join(ROOT, 'rate-limits.json')
 }
 
 export function ensureDirs(host: string): void {
@@ -67,11 +77,14 @@ export function ensureDirs(host: string): void {
 }
 
 // ── Claude Code's own on-disk file ─────────────────────────────────────────────
-// We read (never write) `~/.claude.json` to learn the logged-in account and its rate-limit usage.
-// The path is overridable by env — handy for diagnostics and required by the smoke test, which
-// must never touch the real file.
+// We read (never write) Claude's global config to learn the signed-in account. Same path Claude
+// uses: `$CLAUDE_CONFIG_DIR/.claude.json`, else `~/.claude.json`. `MB_AI_CLAUDE_CONFIG` overrides
+// it — handy for diagnostics and required by the smoke test, which must never touch the real file.
 
-/** `~/.claude.json` — carries `oauthAccount` (the signed-in email) and `cachedUsageUtilization`. */
+/** Claude's global config — carries `oauthAccount` (the signed-in email, org and plan tier). */
 export function claudeConfigPath(): string {
-  return process.env.MB_AI_CLAUDE_CONFIG || join(homedir(), '.claude.json')
+  return (
+    process.env.MB_AI_CLAUDE_CONFIG ||
+    join(process.env.CLAUDE_CONFIG_DIR || homedir(), '.claude.json')
+  )
 }

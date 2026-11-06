@@ -23,8 +23,8 @@ mb-ai profile                               # dump the harness profile the backe
 `src/index.ts` (commander entry) · `src/commands/` (run, login, logout, doctor, profile). Core is flat in
 `src/`: `config` (backend + on-disk paths) · `session` (keychain + JWT + login/token) · `profile`
 (zod schema + fetch) · `launch` (version gate + servers.json + exec claude) · `skills` (download +
-cache the plugin bundle → `--plugin-dir`) · `usage` (read the signed-in Claude account's rate-limit
-usage → throttled, best-effort report) · `errors` (types + parseError + `backendReport`, the
+cache the plugin bundle → `--plugin-dir`) · `usage` (the signed-in Claude account's live weekly
+rate-limit reading → throttled, best-effort report) · `errors` (types + parseError + `backendReport`, the
 share-with-the-team dump for backend 5xx) · `ui` (picocolors theme: `c`, `sym`, `label`, `rule` —
 the one place color/formatting lives) · `log` · `version`. Built bin: `dist/index.js`.
 
@@ -47,29 +47,34 @@ assertions stable. It's a bundled `dependency` (tsup inlines it into `dist`), no
 
 ## Usage reporting (`usage.ts`)
 
-On each launch (`run.ts` step 6, after skills, before exec) the launcher reads the signed-in Claude
-account's rate-limit usage and reports it to `POST /api/v1/mb-harness/usage` (same bearer). It's
-additive telemetry: fully wrapped, never throws, never blocks — a bad read, a changed file shape, or
-a down backend just skips it (see cases I/J/K in the smoke test). **There is no opt-out: usage
-tracking runs on every launch.**
+The launcher reports the signed-in Claude account's **weekly (7-day)** rate-limit usage to
+`POST /api/v1/mb-harness/usage` (same bearer). It's additive telemetry: fully wrapped, never throws,
+never blocks — a bad read, a changed file shape, or a down backend just skips it (smoke cases
+I–K). **There is no opt-out.**
 
-Source — `~/.claude.json` → `oauthAccount` + `cachedUsageUtilization` (per-account). The signed-in
-email/org plus the server's rate-limit view for *that* account: 5-hour "session" % + 7-day "weekly"
-%, reset times, and a per-surface breakdown. Claude refetches it on its own cadence (a few times a
-day, not every launch), so a sample is whatever Claude last saw. On an account switch the key is
-cleared to `null` (verified), so the limits block is simply omitted until the new account refetches.
-We attribute limits to the signed-in account and only trust a cached snapshot whose `accountUuid`
-matches it (a guard that in practice always passes, since a switch nulls the key). (We used to also
-send `~/.claude/stats-cache.json` token counts — dropped: it's machine-wide, has no account identity,
-and only recomputes lazily when someone opens `/usage`, so it was always stale at launch.)
+Two sources:
+- **Identity** — Claude's global config (`$CLAUDE_CONFIG_DIR/.claude.json`, else `~/.claude.json`;
+  `MB_AI_CLAUDE_CONFIG` overrides) → `oauthAccount`: email, org, plan tier.
+- **Limits** — `~/.mb-ai/rate-limits.json`, written by the harness status line. The backend serves
+  the status line in the profile's settings. Claude feeds it live `rate_limits` after every reply
+  (from the API's rate-limit headers). The launcher passes the file path to `claude` as
+  `MB_AI_RATE_LIMITS_FILE`; the status line writes `{observedAt, accountUuid, rateLimits}` there.
+  A reading is only reported under the account it was stamped with.
 
-Throttle: at most one POST per `accountUuid` per the interval, recorded on *attempt* (success or
-failure) in `~/.mb-ai/backends/<host>/usage-state.json`. **The interval is set system-wide by the
-backend** via `profile.usage.reportIntervalMs` (defaults to 2h when the profile is silent) — there is
-no local env knob. The one-line terminal summary and `mb-ai doctor`'s usage block always render the
-current local snapshot (no network, no throttle). Backend side is a single time-series table keyed by
-`(account_uuid, reported_at)`; one row per sample — the payload's top level maps to columns and
-`limits.utilization` rides along as JSONB for fidelity.
+Why not `~/.claude.json → cachedUsageUtilization` (the 0.9.0 source)? Claude rewrites it only when
+someone opens `/usage`, so it sat days to weeks stale (prod, 2026-11-06). Claude has also dropped
+the 5-hour "session" window. Weekly is the only window left, so it's the only one we send.
+
+Cadence — the interval is `profile.usage.reportIntervalMs`, set system-wide by the backend (2h
+fallback when the profile is silent; no local knob):
+- **Launch** — report if the interval has passed for this account.
+- **During the session** — check once a minute, same rule. Silent: claude owns the terminal.
+- **Claude exits** — report if there's a newer reading than the last one sent (the session's final
+  state), whatever the interval.
+
+Throttle state per account lives in `~/.mb-ai/backends/<host>/usage-state.json`
+(`lastReportedAt`, `lastObservedAt`); attempts count, success or not. The one-line launch summary
+and `mb-ai doctor`'s usage block show the current local reading (no network, no throttle).
 
 ## Releasing
 

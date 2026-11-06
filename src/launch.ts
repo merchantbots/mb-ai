@@ -3,7 +3,7 @@ import { execa } from 'execa'
 import { VERSION, INSTALL_COMMAND } from './version'
 import { MbError } from './errors'
 import { debug } from './log'
-import { serversJsonPath, ensureDirs } from './config'
+import { serversJsonPath, ensureDirs, rateLimitsPath } from './config'
 import type { Profile } from './profile'
 
 // ── Version gate ─────────────────────────────────────────────────────────────
@@ -110,7 +110,10 @@ export function buildArgs(profile: Profile, serversPath: string, pluginDirs: str
   return args
 }
 
-/** Spawn the real `claude`, inheriting the terminal. Returns its exit code. */
+/**
+ * Spawn the real `claude`, inheriting the terminal. Returns its exit code. `MB_AI_RATE_LIMITS_FILE`
+ * tells the harness status line where to record Claude's live rate limits (read by usage.ts).
+ */
 export async function execClaude(
   profile: Profile,
   serversPath: string,
@@ -119,7 +122,10 @@ export async function execClaude(
   const args = buildArgs(profile, serversPath, pluginDirs)
   debug(`exec: claude ${args.map((a) => (a.includes(' ') ? '"…"' : a)).join(' ')}`)
   try {
-    const res = await execa('claude', args, { stdio: 'inherit' })
+    const res = await execa('claude', args, {
+      stdio: 'inherit',
+      env: { MB_AI_RATE_LIMITS_FILE: rateLimitsPath() }, // added to the inherited env
+    })
     return res.exitCode ?? 0
   } catch (e: any) {
     if (e?.code === 'ENOENT') {

@@ -3,7 +3,7 @@ import { getValidToken } from '../session'
 import { fetchProfile } from '../profile'
 import { writeServersJson, execClaude, assertLauncherVersion } from '../launch'
 import { ensureSkills } from '../skills'
-import { reportUsage } from '../usage'
+import { reportUsage, startUsageReporter, DEFAULT_REPORT_INTERVAL_MS } from '../usage'
 import { NeedsLogin, ApiError, MbError } from '../errors'
 import { info, warn, debug } from '../log'
 import { doLogin } from './login'
@@ -57,11 +57,20 @@ export async function run(opts: { backendUrl?: string }): Promise<void> {
   // 5. sync the skills plugin bundle (cached by commit; re-downloads only when it changes)
   const pluginDirs = await ensureSkills(host, profile, token)
 
-  // 6. report the signed-in Claude account's usage (always on; throttle interval set by the
-  //    backend profile; best-effort — never blocks or fails the launch)
-  await reportUsage(url, host, token, profile.usage?.reportIntervalMs)
+  // 6. report the signed-in Claude account's usage — now, while the session runs, and once more
+  //    when claude exits (always on; interval set by the backend profile; best-effort — never
+  //    blocks or fails the launch)
+  const reporting = {
+    backendUrl: url,
+    host,
+    token,
+    intervalMs: profile.usage?.reportIntervalMs ?? DEFAULT_REPORT_INTERVAL_MS,
+  }
+  await reportUsage(reporting)
+  const stopReporting = startUsageReporter(reporting)
 
-  // 7. hand off to claude
+  // 7. hand off to claude, then send the session's final reading
   const code = await execClaude(profile, serversPath, pluginDirs)
+  await stopReporting()
   process.exit(code)
 }
